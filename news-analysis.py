@@ -1,6 +1,7 @@
 
 # import for environment variables and waiting
 import os, time
+from typing import Mapping
 
 # used to parse XML feeds
 import xml.etree.ElementTree as ET
@@ -220,7 +221,7 @@ def calculate_volume():
 # load the csv file containg top 100 crypto feeds
 # want to scan other websites?
 # Simply add the RSS Feed url to the Crypto feeds.csv file
-with open('Crypto feeds.csv') as csv_file:
+with open('crypto_feeds.csv') as csv_file:
 
     # open the file
     csv_reader = csv.reader(csv_file)
@@ -228,19 +229,15 @@ with open('Crypto feeds.csv') as csv_file:
     # remove any headers
     next(csv_reader, None)
 
-    # create empty list
-    feeds = []
-
     # add each row cotaining RSS url to feeds list
-    for row in csv_reader:
-        feeds.append(row[0])
+    feeds = [row[0] for row in csv_reader]
 
 
 # Make headlines global variable as it should be the same across all functions
 headlines = {'source': [], 'title': [], 'pubDate' : [] }
 
 
-async def get_feed_data(session, feed, headers):
+async def get_feed_data(session: aiohttp.ClientSession, feed: str, headers: Mapping[str, str]):
     '''
     Get relevent data from rss feed, in async fashion
     :param feed: The name of the feed we want to fetch
@@ -293,10 +290,7 @@ async def get_headlines():
     # A nifty timer to see how long it takes to parse all the feeds
     start = timer()
     async with aiohttp.ClientSession() as session:
-        tasks = []
-        for feed in feeds:
-            task = asyncio.ensure_future(get_feed_data(session, feed, headers))
-            tasks.append(task)
+        tasks = [asyncio.ensure_future(get_feed_data(session, feed, headers)) for feed in feeds]
 
         # This makes sure we finish all tasks/requests before we continue executing our code
         await asyncio.gather(*tasks)
@@ -308,15 +302,10 @@ def categorise_headlines():
     '''arrange all headlines scaped in a dictionary matching the coin's name'''
     # get the headlines
     asyncio.run(get_headlines())
-    categorised_headlines = {}
-
-    # this loop will create a dictionary for each keyword defined
-    for keyword in keywords:
-        categorised_headlines['{0}'.format(keyword)] = []
+    categorised_headlines = {k: [] for k in keywords.keys()}
 
     # keyword needs to be a loop in order to be able to append headline to the correct dictionary
-    for keyword in keywords:
-
+    for keyword in keywords.keys():
         # looping through each headline is required as well
         for headline in headlines['title']:
             # appends the headline containing the keyword to the correct dictionary
@@ -331,14 +320,12 @@ def analyse_headlines():
     sia = SentimentIntensityAnalyzer()
     categorised_headlines = categorise_headlines()
 
-    sentiment = {}
+    sentiment = {k: [] for k in categorised_headlines.keys()}
 
-    for coin in categorised_headlines:
-        if len(categorised_headlines[coin]) > 0:
-            # create dict for each coin
-            sentiment['{0}'.format(coin)] = []
+    for coin, titles in categorised_headlines.items():
+        if len(titles) > 0:
             # append sentiment to dict
-            for title in categorised_headlines[coin]:
+            for title in titles:
                 sentiment[coin].append(sia.polarity_scores(title))
 
     return sentiment
@@ -347,14 +334,12 @@ def analyse_headlines():
 def compile_sentiment():
     '''Arranges every compound value into a list for each coin'''
     sentiment = analyse_headlines()
-    compiled_sentiment = {}
+    compiled_sentiment = {k: [] for k in sentiment.keys()}
 
-    for coin in sentiment:
-        compiled_sentiment[coin] = []
-
-        for item in sentiment[coin]:
+    for coin, items in sentiment.items():
+        for item in items:
             # append each compound value to each coin's dict
-            compiled_sentiment[coin].append(sentiment[coin][sentiment[coin].index(item)]['compound'])
+            compiled_sentiment[coin].append(item['compound'])
 
     return compiled_sentiment
 
